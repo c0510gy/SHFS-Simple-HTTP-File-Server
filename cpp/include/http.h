@@ -4,23 +4,132 @@
 #include <string>
 #include <map>
 
+std::string urlEncode(std::string str)
+{
+  std::string new_str = "";
+  char c;
+  int ic;
+  const char *chars = str.c_str();
+  char bufHex[10];
+  int len = strlen(chars);
+
+  for (int i = 0; i < len; i++)
+  {
+    c = chars[i];
+    ic = c;
+    if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~')
+      new_str += c;
+    else
+    {
+      sprintf(bufHex, "%X", c);
+      if (ic < 16)
+        new_str += "%0";
+      else
+        new_str += "%";
+      new_str += bufHex;
+    }
+  }
+  return new_str;
+}
+
+std::string urlDecode(std::string str)
+{
+  std::string ret;
+  char ch;
+  int i, ii, len = str.length();
+
+  for (i = 0; i < len; i++)
+  {
+    if (str[i] != '%')
+    {
+      if (str[i] == '+')
+        ret += ' ';
+      else
+        ret += str[i];
+    }
+    else
+    {
+      sscanf(str.substr(i + 1, 2).c_str(), "%x", &ii);
+      ch = static_cast<char>(ii);
+      ret += ch;
+      i = i + 2;
+    }
+  }
+  return ret;
+}
+
 class HTTPRequest
 {
 public:
   std::string method;
   std::string URL;
+  std::map<std::string, std::string> url_params;
   std::string version;
   std::map<std::string, std::string> headers;
   std::string body;
 
-  HTTPRequest() {}
+  void clear()
+  {
+    method = "";
+    URL = "";
+    url_params.clear();
+    version = "";
+    headers.clear();
+    body = "";
+  }
+  std::map<std::string, std::string> parseBody()
+  {
+    std::map<std::string, std::string> parsed_body;
+    const std::string FORM_URL_ENCODED = "application/x-www-form-urlencoded"; // ; charset=UTF-8
+
+    std::string content_type = headers.find("Content-Type") == headers.end() ? FORM_URL_ENCODED : headers["Content-Type"];
+
+    if (content_type.find(FORM_URL_ENCODED) != std::string::npos)
+    {
+      std::string key = "", value = "";
+      for (int j = 0, flag = 0; j < body.size(); ++j)
+      {
+        if (body[j] == '=')
+        {
+          flag = 1;
+        }
+        else if (body[j] == '&')
+        {
+          parsed_body[urlDecode(key)] = urlDecode(value);
+          key = "";
+          value = "";
+          flag = 0;
+        }
+        else
+        {
+          if (flag)
+            value += body[j];
+          else
+            key += body[j];
+        }
+      }
+      if (key.size() > 0 && value.size() > 0)
+        parsed_body[urlDecode(key)] = urlDecode(value);
+    }
+
+    return parsed_body;
+  }
+  HTTPRequest()
+  {
+    clear();
+  }
   HTTPRequest(std::string req_message)
   {
+    clear();
+
     int j = 0;
-    for (int col = 0; j + 1 < req_message.size(); ++j)
+    std::string url_param_key = "";
+    for (int col = 0, url_param_flag = 0; j + 1 < req_message.size(); ++j)
     {
       if (req_message[j] == ' ')
+      {
         ++col;
+      }
       else if (req_message[j] == '\r' && req_message[j + 1] == '\n')
         break;
       else
@@ -31,7 +140,22 @@ public:
           method += req_message[j];
           break;
         case 1:
-          URL += req_message[j];
+          if (req_message[j] == '?' || req_message[j] == '&')
+          {
+            url_param_flag = 1;
+            url_param_key = "";
+          }
+          else if (req_message[j] == '=')
+          {
+            url_param_flag = 2;
+            url_params[url_param_key] = "";
+          }
+          else if (url_param_flag == 1)
+            url_param_key += req_message[j];
+          else if (url_param_flag == 2)
+            url_params[url_param_key] += req_message[j];
+          else
+            URL += req_message[j];
           break;
         case 2:
           version += req_message[j];
@@ -46,6 +170,7 @@ public:
       if (req_message[j] == ':' && req_message[j + 1] == ' ')
       {
         ++col;
+        ++j;
         headers[key] = "";
       }
       else if (col && req_message[j] == '\r' && req_message[j + 1] == '\n')
@@ -72,6 +197,8 @@ public:
     j += 2;
     for (; j < req_message.size(); ++j)
       body += req_message[j];
+
+    URL = urlDecode(URL);
   }
 };
 

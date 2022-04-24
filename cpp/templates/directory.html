@@ -1,11 +1,116 @@
 <html>
   <head>
-    <title>{0}</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.simplecss.org/simple.min.css" />
+    <title>{{title}}</title>
   </head>
   <body>
-    <h1>{1}</h1>
-    <ul>
-      {2}
-    </ul>
+    <script src="https://kit.fontawesome.com/e286ff9e3b.js" crossorigin="anonymous"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    
+    <h1>{{header}}</h1>
+    <div>
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Filename</th>
+              <th>Filesize</th>
+              <th>Last modified</th>
+              <th>Delete</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{content}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <form id="new_directory" action="./" method="post">
+        <table style="margin: 0">
+          <tr>
+            <td colspan="2">Create new directory</td>
+          </tr>
+          <tr>
+            <th style="max-width: 70px;">New directory name</td>
+            <td><input style="width: 100%" type="text" name="directory_name" placeholder="new directory name" /></td>
+          </tr>
+          <tr>
+            <td colspan="2">
+              <input type="submit" value="Create new directory" />
+            </td>
+          </tr>
+        </table>
+      </form>
+      <form id="file_upload">
+        <table style="margin: 0">
+          <tr>
+            <td colspan="2">File Upload</td>
+          </tr>
+          <tr>
+            <th style="max-width: 70px;">Select File</th>
+            <td><input style="width: 100%" id="file" name="file" type="file" /></td>
+          </tr>
+          <tr>
+            <td colspan="2">
+              <input type="submit" value="Upload new file" />
+            </td>
+          </tr>
+        </table>
+      </form>
+    </div>
+    
+    <script>
+      function delete_(file_name) {
+        $.ajax({
+          url: './',
+          type: 'DELETE',
+          data: {
+            file_name,
+          },
+          success: function (result) {
+            alert('deleted')
+            location.href = './'
+          },
+        })
+      }
+
+      $('#file_upload').submit(function (evt) {
+        evt.preventDefault()
+        const file_input = $('#file')[0]
+
+        if (file_input.files.length === 0) {
+          alert('파일을 선택해주세요')
+          return false
+        }
+
+        const file = file_input.files[0]
+
+        const reader = new FileReader()
+
+        reader.onload = function () {
+          $.ajax({
+            type: 'PUT',
+            url: './',
+
+            data: {
+              file: /base64,(.+)/.exec(reader.result)[1],
+              name: file_input.files[0].name,
+            },
+
+            success: function (response) {
+              alert('uploaded')
+              location.href = './'
+            },
+          })
+        }
+
+        reader.readAsDataURL(file)
+
+        return false
+      })
+    </script>
   </body>
 </html>
