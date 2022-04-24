@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <map>
+#include <vector>
 #include <fstream>
 #include <sstream>
 #include <filesystem>
@@ -18,6 +19,9 @@
 #define FMT_HEADER_ONLY
 #include "./lib/fmt/core.h"
 #define PORT 1234
+#define MAX_HEADER_SIZE 8192
+#define MAX_RECV_SIZE 8192
+#define MAX_SEND_SIZE 8192
 
 const std::string ROOT_DIRECTORY = "./root";
 
@@ -78,7 +82,9 @@ std::string getType(std::string filepath)
   else if (filepath.find(".jpg") != std::string::npos)
     return "image/jpeg";
   else if (filepath.find(".mp4") != std::string::npos)
-    return "image/mp4";
+    return "video/mp4";
+  else if (filepath.find(".mov") != std::string::npos)
+    return "video/mp4";
   else if (filepath.find(".pdf") != std::string::npos)
     return "application/pdf";
 
@@ -198,7 +204,14 @@ HTTPResponse postHanlder(HTTPRequest &request)
     std::filesystem::create_directory(path + directory_name);
   }
 
-  return getHanlder(request);
+  HTTPResponse response = HTTPResponse();
+  response.protocol = "HTTP/1.0";
+  response.status_code = "200";
+  response.status_phrase = "OK";
+  response.headers["Connection"] = "close";
+  response.headers["Content-Length"] = std::to_string(response.body.size());
+
+  return response;
 }
 
 HTTPResponse deleteHanlder(HTTPRequest &request)
@@ -216,7 +229,14 @@ HTTPResponse deleteHanlder(HTTPRequest &request)
     std::filesystem::remove_all(path + file_name);
   }
 
-  return getHanlder(request);
+  HTTPResponse response = HTTPResponse();
+  response.protocol = "HTTP/1.0";
+  response.status_code = "200";
+  response.status_phrase = "OK";
+  response.headers["Connection"] = "close";
+  response.headers["Content-Length"] = std::to_string(response.body.size());
+
+  return response;
 }
 
 HTTPResponse putHanlder(HTTPRequest &request)
@@ -234,7 +254,14 @@ HTTPResponse putHanlder(HTTPRequest &request)
   ofs.write(file.c_str(), file.size());
   ofs.close();
 
-  return getHanlder(request);
+  HTTPResponse response = HTTPResponse();
+  response.protocol = "HTTP/1.0";
+  response.status_code = "200";
+  response.status_phrase = "OK";
+  response.headers["Connection"] = "close";
+  response.headers["Content-Length"] = std::to_string(response.body.size());
+
+  return response;
 }
 
 HTTPResponse methodHandler(HTTPRequest &request)
@@ -294,7 +321,7 @@ int main()
   int opt = 1;
   struct sockaddr_in address;
   int addrlen = sizeof(address);
-  char buffer[1048576 * 7] = {0};
+  char buffer[MAX_HEADER_SIZE] = {0}; // 1048576 * 7
 
   if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
   {
@@ -334,76 +361,66 @@ int main()
     }
 
     memset(buffer, 0, sizeof(buffer));
-    char *buffer_ptr = buffer;
-    char *buffer_end = buffer + sizeof(buffer);
+    std::vector<char> recv_buffer(MAX_HEADER_SIZE, 0);
+
     int content_length = -1;
-    int received = 0;
-    do
+    valread = read(listen_fd, buffer, MAX_HEADER_SIZE);
+    if (valread > 0)
     {
-      char tmp_buffer[1024] = {0};
-      memset(tmp_buffer, 0, sizeof(tmp_buffer));
-      valread = read(listen_fd, tmp_buffer, 1024);
-
-      if (valread > 0)
+      int header_end = -1;
+      for (int j = 0; j + 3 < valread; ++j)
       {
-        if (!((buffer_ptr + valread) <= buffer_end))
+        if (buffer[j] == '\r' && buffer[j + 1] == '\n' && buffer[j + 2] == '\r' && buffer[j + 3] == '\n')
+        {
+          header_end = j;
           break;
-
-        int header_end = -1;
-        for (int j = 0; j + 3 < valread; ++j)
-        {
-          if (tmp_buffer[j] == '\r' && tmp_buffer[j + 1] == '\n' && tmp_buffer[j + 2] == '\r' && tmp_buffer[j + 3] == '\n')
-          {
-            header_end = j;
-            break;
-          }
         }
-        if (header_end != -1)
-        {
-          memcpy(buffer_ptr, tmp_buffer, header_end);
-          HTTPRequest request_header = HTTPRequest(buffer);
-          if (request_header.headers.find("Content-Length") != request_header.headers.end())
-          {
-            content_length = atoi(request_header.headers["Content-Length"].c_str());
-          }
-        }
-
-        received += valread;
-        fprintf(stderr, "Bytes received: %d\t total: %d\t content-length: %d\n", valread, received, content_length);
-
-        memcpy(buffer_ptr, tmp_buffer, valread);
-        buffer_ptr += valread;
       }
-      else if (valread == 0)
+      if (header_end == -1)
       {
-        break;
+        // error 413 Entity Too Large
       }
       else
       {
-        // fprintf(stderr, "recv failed: ");
-        break;
-      }
-    } while ((valread == 1024 && buffer_ptr < buffer_end) || (content_length != -1 && (buffer_ptr - buffer + 1) < content_length)); // check for end of buffer
+        memcpy(recv_buffer.data(), buffer, header_end);
+        HTTPRequest request_header = HTTPRequest(recv_buffer.data());
+        if (request_header.headers.find("Content-Length") != request_header.headers.end())
+        {
+          content_length = atoi(request_header.headers["Content-Length"].c_str());
+        }
 
-    printf("%.1024s\n", buffer);
-    HTTPResponse response = requestHandler(buffer);
+        memcpy(recv_buffer.data(), buffer, valread);
+      }
+    }
+
+    if (content_length > 0)
+    {
+      recv_buffer.resize(content_length);
+
+      for (int received = valread; received < content_length; received += valread)
+      {
+        valread = read(listen_fd, buffer, MAX_RECV_SIZE);
+        if (valread > 0)
+        {
+          fprintf(stderr, "Bytes received: %d\t total: %d\t content-length: %d\n", valread, received + valread, content_length);
+          memcpy(recv_buffer.data() + received, buffer, valread);
+        }
+      }
+    }
+    printf("%.1024s\n", recv_buffer.data());
+
+    HTTPResponse response = requestHandler(recv_buffer.data());
     string response_message = response.toMessage();
 
-    int bufferSize = 1024;
-    int messageLength = response_message.size();
-    int sendPosition = 0;
-
-    char *response_message_ptr = response_message.data();
-    char sending_buffer[1024] = {0};
+    int buffer_size = MAX_SEND_SIZE;
+    char sending_buffer[MAX_SEND_SIZE] = {0};
     memset(sending_buffer, 0, sizeof(sending_buffer));
-
-    while (messageLength)
+    for (int sent = 0, chunk_size; sent < response_message.size(); sent += chunk_size)
     {
-      int chunkSize = messageLength > bufferSize ? bufferSize : messageLength;
-      memcpy(sending_buffer, response_message_ptr + sendPosition, chunkSize);
-      chunkSize = send(listen_fd, sending_buffer, chunkSize, NULL);
-      messageLength -= chunkSize;
-      sendPosition += chunkSize;
+      chunk_size = (int)response_message.size() - sent > buffer_size ? buffer_size : (int)response_message.size() - sent;
+      memcpy(sending_buffer, response_message.data() + sent, chunk_size);
+      chunk_size = send(listen_fd, sending_buffer, chunk_size, NULL);
+      fprintf(stderr, "Bytes sent: %d\t total: %d\t content-length: %d\n", chunk_size, sent + chunk_size, response_message.size());
     }
 
     close(listen_fd);

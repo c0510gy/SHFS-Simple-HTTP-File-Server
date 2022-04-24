@@ -28,14 +28,14 @@
       </div>
     </div>
     <div>
-      <form id="new_directory" action="./" method="post">
+      <form id="new_directory">
         <table style="margin: 0">
           <tr>
             <td colspan="2">Create new directory</td>
           </tr>
           <tr>
             <th style="max-width: 70px;">New directory name</td>
-            <td><input style="width: 100%" type="text" name="directory_name" placeholder="new directory name" /></td>
+            <td><input style="width: 100%" type="text" id="directory_name" name="directory_name" placeholder="new directory name" /></td>
           </tr>
           <tr>
             <td colspan="2">
@@ -61,7 +61,7 @@
         </table>
       </form>
     </div>
-    
+
     <script>
       function delete_(file_name) {
         $.ajax({
@@ -76,6 +76,32 @@
           },
         })
       }
+
+      $('#new_directory').submit(function (evt) {
+        evt.preventDefault()
+        const directory_name = $('#directory_name')[0]
+
+        if (directory_name.value.length === 0) {
+          alert('디렉토리 이름을 입력하세요')
+          return false
+        }
+
+        $.ajax({
+          type: 'POST',
+          url: './',
+
+          data: {
+            directory_name: directory_name.value,
+          },
+
+          success: function (response) {
+            alert('created')
+            location.href = './'
+          },
+        })
+
+        return false
+      })
 
       $('#file_upload').submit(function (evt) {
         evt.preventDefault()
