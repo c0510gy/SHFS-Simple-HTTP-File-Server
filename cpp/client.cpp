@@ -13,105 +13,14 @@
 #define MAX_RECV_SIZE 8192
 #define MAX_SEND_SIZE 8192
 
-int getSocket(char *address, int port)
-{
-  int sock = 0;
-  struct sockaddr_in serv_addr;
+int getSocket(char *address, int port);
 
-  if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-  {
-    printf("\n Socket creation error \n");
-    return -1;
-  }
+HTTPRequest requestGET(std::string url);
+HTTPRequest requestPOST(std::string url, std::string directory_name);
+HTTPRequest requestDELETE(std::string url, std::string file_name);
+HTTPRequest requestPUT(std::string url, std::string file_name, std::string file_content);
 
-  serv_addr.sin_family = AF_INET;
-  serv_addr.sin_port = htons(port);
-
-  // Convert IPv4 and IPv6 addresses from text to binary form
-  if (inet_pton(AF_INET, address, &serv_addr.sin_addr) <= 0)
-  {
-    printf("\nInvalid address/ Address not supported \n");
-    return -1;
-  }
-
-  if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-  {
-    printf("\nConnection Failed \n");
-    return -1;
-  }
-
-  return sock;
-}
-
-std::string readFile(std::string filepath)
-{
-  std::ifstream file;
-  file.open(filepath.c_str());
-  file.seekg(0, std::ios::end);
-  std::streamsize size = file.tellg();
-  file.seekg(0, std::ios::beg);
-
-  std::stringstream strStream;
-  strStream << file.rdbuf();
-
-  return strStream.str();
-}
-
-HTTPRequest requestGET(std::string url)
-{
-  HTTPRequest request;
-  request.method = "GET";
-  request.URL = url;
-  request.version = "HTTP/1.0";
-
-  request.headers["Connection"] = "keep-alive";
-  // request.headers["Content-Length"] = std::to_string(request.body.size());
-
-  return request;
-}
-
-HTTPRequest requestPOST(std::string url, std::string directory_name)
-{
-  HTTPRequest request;
-  request.method = "POST";
-  request.URL = url;
-  request.version = "HTTP/1.0";
-
-  request.headers["Connection"] = "keep-alive";
-  request.body = "directory_name=" + urlEncode(directory_name);
-  request.headers["Content-Length"] = std::to_string(request.body.size());
-
-  return request;
-}
-
-HTTPRequest requestDELETE(std::string url, std::string file_name)
-{
-  HTTPRequest request;
-  request.method = "DELETE";
-  request.URL = url;
-  request.version = "HTTP/1.0";
-
-  request.headers["Connection"] = "keep-alive";
-  request.body = "file_name=" + urlEncode(file_name);
-  request.headers["Content-Length"] = std::to_string(request.body.size());
-
-  return request;
-}
-
-HTTPRequest requestPUT(std::string url, std::string file_name, std::string file_content)
-{
-  HTTPRequest request;
-  request.method = "PUT";
-  request.URL = url;
-  request.version = "HTTP/1.0";
-
-  request.headers["Connection"] = "keep-alive";
-  request.body = "file=" + urlEncode(base64Encode(file_content));
-  request.body += "&name=" + urlEncode(file_name);
-  request.headers["Content-Length"] = std::to_string(request.body.size());
-
-  return request;
-}
+std::string readFile(std::string filepath);
 
 int main()
 {
@@ -184,4 +93,103 @@ int main()
   close(sock);
 
   return 0;
+}
+
+int getSocket(char *address, int port)
+{
+  int sock = 0;
+  struct sockaddr_in serv_addr;
+
+  if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+  {
+    printf("\n Socket creation error \n");
+    return -1;
+  }
+
+  serv_addr.sin_family = AF_INET;
+  serv_addr.sin_port = htons(port);
+
+  // Convert IPv4 and IPv6 addresses from text to binary form
+  if (inet_pton(AF_INET, address, &serv_addr.sin_addr) <= 0)
+  {
+    printf("\nInvalid address/ Address not supported \n");
+    return -1;
+  }
+
+  if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+  {
+    printf("\nConnection Failed \n");
+    return -1;
+  }
+
+  return sock;
+}
+
+HTTPRequest requestGET(std::string url)
+{
+  HTTPRequest request;
+  request.method = "GET";
+  request.URL = url;
+  request.version = "HTTP/1.0";
+
+  request.headers["Connection"] = "keep-alive";
+
+  return request;
+}
+
+HTTPRequest requestPOST(std::string url, std::string directory_name)
+{
+  HTTPRequest request;
+  request.method = "POST";
+  request.URL = url;
+  request.version = "HTTP/1.0";
+
+  request.headers["Connection"] = "keep-alive";
+  request.body = "directory_name=" + urlEncode(directory_name);
+  request.headers["Content-Length"] = std::to_string(request.body.size());
+
+  return request;
+}
+
+HTTPRequest requestDELETE(std::string url, std::string file_name)
+{
+  HTTPRequest request;
+  request.method = "DELETE";
+  request.URL = url;
+  request.version = "HTTP/1.0";
+
+  request.headers["Connection"] = "keep-alive";
+  request.body = "file_name=" + urlEncode(file_name);
+  request.headers["Content-Length"] = std::to_string(request.body.size());
+
+  return request;
+}
+
+HTTPRequest requestPUT(std::string url, std::string file_name, std::string file_content)
+{
+  HTTPRequest request;
+  request.method = "PUT";
+  request.URL = url;
+  request.version = "HTTP/1.0";
+
+  request.headers["Connection"] = "keep-alive";
+  request.body = "file=" + urlEncode(base64Encode(file_content));
+  request.body += "&name=" + urlEncode(file_name);
+  request.headers["Content-Length"] = std::to_string(request.body.size());
+
+  return request;
+}
+
+std::string readFile(std::string filepath)
+{
+  std::ifstream file;
+  file.open(filepath.c_str());
+  file.seekg(0, std::ios::end);
+  std::streamsize size = file.tellg();
+  file.seekg(0, std::ios::beg);
+
+  std::stringstream strStream;
+  strStream << file.rdbuf();
+
+  return strStream.str();
 }
