@@ -18,94 +18,195 @@
 #include "./include/base64.h"
 #define FMT_HEADER_ONLY
 #include "./lib/fmt/core.h"
+
 #define PORT 1234
 #define MAX_HEADER_SIZE 8192
 #define MAX_RECV_SIZE 8192
 #define MAX_SEND_SIZE 8192
+#define MAX_CONNECTION 10
 
 const std::string ROOT_DIRECTORY = "./root";
 
-using std::cerr;
-using std::map;
-using std::string;
+std::string currentDirectory(std::string path);
+std::string readFile(std::string filepath);
+std::string getType(std::string filepath);
+std::string parsePath(std::string url);
 
-std::string currentDirectory(std::string path)
+HTTPResponse requestHandler(char *buffer);
+HTTPResponse methodHandler(HTTPRequest &request);
+HTTPResponse getHandler(HTTPRequest &request);
+HTTPResponse postHandler(HTTPRequest &request);
+HTTPResponse deleteHandler(HTTPRequest &request);
+HTTPResponse putHandler(HTTPRequest &request);
+HTTPResponse errorResponse(std::string error_code, std::string error_phrase, std::string error_message);
+
+int main()
 {
-  std::string ret = "";
+  int server_fd, listen_fd, valread;
+  int opt = 1;
+  struct sockaddr_in address;
+  int addrlen = sizeof(address);
+  char buffer[MAX_HEADER_SIZE] = {0};
 
-  int j = path.size();
-  while (j && path[--j] != '/')
-    ;
-  for (int i = 0; i <= j; ++i)
-    ret += path[i];
-  return ret;
+  if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
+  {
+    std::cerr << "socket failed";
+    return -1;
+  }
+
+  address.sin_family = AF_INET;
+  address.sin_addr.s_addr = inet_addr("192.168.0.10"); // INADDR_ANY;
+  address.sin_port = htons(PORT);
+
+  if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
+  {
+    std::cerr << "bind failed";
+    return -1;
+  }
+
+  while (true)
+  {
+    if (listen(server_fd, MAX_CONNECTION) < 0)
+    {
+      std::cerr << "listen";
+      return -1;
+    }
+
+    if ((listen_fd = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0)
+    {
+      std::cerr << "accept";
+      return -1;
+    }
+
+    int pid = fork();
+
+    if (pid != 0)
+    {
+      continue;
+    }
+
+    memset(buffer, 0, sizeof(buffer));
+    std::vector<char> recv_buffer(MAX_HEADER_SIZE, 0);
+
+    int content_length = -1;
+    valread = read(listen_fd, buffer, MAX_HEADER_SIZE);
+    if (valread > 0)
+    {
+      int header_end = -1;
+      for (int j = 0; j + 3 < valread; ++j)
+      {
+        if (buffer[j] == '\r' && buffer[j + 1] == '\n' && buffer[j + 2] == '\r' && buffer[j + 3] == '\n')
+        {
+          header_end = j;
+          break;
+        }
+      }
+      if (header_end == -1)
+      {
+        // error 413 Entity Too Large
+      }
+      else
+      {
+        memcpy(recv_buffer.data(), buffer, header_end);
+        HTTPRequest request_header = HTTPRequest(recv_buffer.data());
+        if (request_header.headers.find("Content-Length") != request_header.headers.end())
+        {
+          content_length = atoi(request_header.headers["Content-Length"].c_str());
+        }
+
+        memcpy(recv_buffer.data(), buffer, valread);
+      }
+    }
+
+    if (content_length > 0)
+    {
+      recv_buffer.resize(content_length);
+
+      for (int received = valread; received < content_length; received += valread)
+      {
+        valread = read(listen_fd, buffer, MAX_RECV_SIZE);
+        if (valread > 0)
+        {
+          fprintf(stderr, "Bytes received: %d\t total: %d\t content-length: %d\n", valread, received + valread, content_length);
+          memcpy(recv_buffer.data() + received, buffer, valread);
+        }
+      }
+    }
+    printf("%.1024s\n", recv_buffer.data());
+
+    HTTPResponse response = requestHandler(recv_buffer.data());
+    std::string response_message = response.toMessage();
+
+    int buffer_size = MAX_SEND_SIZE;
+    char sending_buffer[MAX_SEND_SIZE] = {0};
+    memset(sending_buffer, 0, sizeof(sending_buffer));
+    for (int sent = 0, chunk_size; sent < response_message.size(); sent += chunk_size)
+    {
+      chunk_size = (int)response_message.size() - sent > buffer_size ? buffer_size : (int)response_message.size() - sent;
+      memcpy(sending_buffer, response_message.data() + sent, chunk_size);
+      chunk_size = send(listen_fd, sending_buffer, chunk_size, NULL);
+      fprintf(stderr, "Bytes sent: %d\t total: %d\t content-length: %d\n", chunk_size, sent + chunk_size, response_message.size());
+    }
+
+    close(listen_fd);
+    return 0;
+  }
+
+  return 0;
 }
 
-std::string readFile(std::string filepath)
-{
-  std::ifstream file;
-  file.open(filepath.c_str());
-  file.seekg(0, std::ios::end);
-  std::streamsize size = file.tellg();
-  file.seekg(0, std::ios::beg);
-
-  std::stringstream strStream;
-  strStream << file.rdbuf();
-
-  return strStream.str();
-}
-
-HTTPResponse errorResponse(std::string error_code, std::string error_phrase, std::string error_message)
+HTTPResponse requestHandler(char *buffer)
 {
   HTTPResponse response;
-  response.protocol = "HTTP/1.0";
-  response.status_code = error_code;
-  response.status_phrase = error_phrase;
+  try
+  {
+    std::string req_message = std::string(buffer);
 
-  std::string error_template = readFile("./templates/error.html");
+    HTTPRequest request = HTTPRequest(req_message);
 
-  response.headers["Connection"] = "close";
-  response.body = fmt::format(error_template, error_code, error_phrase, error_message);
-  response.headers["Content-Length"] = std::to_string(response.body.size());
+    response = methodHandler(request);
+  }
+  catch (int expn)
+  {
+    response = errorResponse("501", "Not Implemented", "Couldn't handle this method");
+  }
 
   return response;
 }
 
-std::string getType(std::string filepath)
+HTTPResponse methodHandler(HTTPRequest &request)
 {
-  if (filepath.find(".html") != std::string::npos)
-    return "text/html";
-  else if (filepath.find(".gif") != std::string::npos)
-    return "image/gif";
-  else if (filepath.find(".png") != std::string::npos)
-    return "image/png";
-  else if (filepath.find(".jpg") != std::string::npos)
-    return "image/jpeg";
-  else if (filepath.find(".mp4") != std::string::npos)
-    return "video/mp4";
-  else if (filepath.find(".mov") != std::string::npos)
-    return "video/mp4";
-  else if (filepath.find(".pdf") != std::string::npos)
-    return "application/pdf";
+  /*
+  GET URL
+    URL이 가리키는 디렉토리 조회 또는 파일 가져오기
+  POST
+    디렉토리 생성
+  PUT
+    파일 업로드
+  DELETE
+    파일 또는 디렉토리 삭제
+  */
+  if (request.method == "GET")
+  {
+    return getHandler(request);
+  }
+  else if (request.method == "POST")
+  {
+    return postHandler(request);
+  }
+  else if (request.method == "DELETE")
+  {
+    return deleteHandler(request);
+  }
+  else if (request.method == "PUT")
+  {
+    return putHandler(request);
+  }
 
-  return "text/plain";
+  return errorResponse("501", "Not Implemented", "Couldn't handle this method");
 }
 
-std::string parsePath(std::string url)
-{
-  std::string path = "";
-  for (int j = 0; j < url.size() && url[j] != '?'; ++j)
-  {
-    path += url[j];
-  }
-  if (path == "/")
-  {
-    // path += "index.html";
-  }
-  return path;
-}
-
-HTTPResponse getHanlder(HTTPRequest &request)
+HTTPResponse getHandler(HTTPRequest &request)
 {
   std::string path = ROOT_DIRECTORY + parsePath(request.URL);
   std::cout << path << std::endl;
@@ -117,11 +218,11 @@ HTTPResponse getHanlder(HTTPRequest &request)
 
   if (path.back() == '/' && std::filesystem::is_directory(path))
   {
-    string parent_path = path.size() > ROOT_DIRECTORY.size() + 1
-                             ? currentDirectory(
-                                   path.substr(0, path.size() - 1))
-                                   .erase(0, ROOT_DIRECTORY.size())
-                             : "";
+    std::string parent_path = path.size() > ROOT_DIRECTORY.size() + 1
+                                  ? currentDirectory(
+                                        path.substr(0, path.size() - 1))
+                                        .erase(0, ROOT_DIRECTORY.size())
+                                  : "";
 
     std::cout << "parent_path " << parent_path << std::endl;
 
@@ -190,7 +291,7 @@ HTTPResponse getHanlder(HTTPRequest &request)
   return errorResponse("403", "Forbidden", "Couldn't read the file");
 }
 
-HTTPResponse postHanlder(HTTPRequest &request)
+HTTPResponse postHandler(HTTPRequest &request)
 {
   std::string path = ROOT_DIRECTORY + parsePath(request.URL);
   std::cout << path << std::endl;
@@ -214,7 +315,7 @@ HTTPResponse postHanlder(HTTPRequest &request)
   return response;
 }
 
-HTTPResponse deleteHanlder(HTTPRequest &request)
+HTTPResponse deleteHandler(HTTPRequest &request)
 {
   std::string path = ROOT_DIRECTORY + parsePath(request.URL);
   std::cout << path << std::endl;
@@ -239,7 +340,7 @@ HTTPResponse deleteHanlder(HTTPRequest &request)
   return response;
 }
 
-HTTPResponse putHanlder(HTTPRequest &request)
+HTTPResponse putHandler(HTTPRequest &request)
 {
   std::string path = ROOT_DIRECTORY + parsePath(request.URL);
   std::cout << path << std::endl;
@@ -248,7 +349,7 @@ HTTPResponse putHanlder(HTTPRequest &request)
 
   std::cout << "new_file_name " << parsed_body["name"] << std::endl;
 
-  std::string file = base64_decode(parsed_body["file"]);
+  std::string file = base64Decode(parsed_body["file"]);
 
   std::ofstream ofs(path + parsed_body["name"], std::ios::binary);
   ofs.write(file.c_str(), file.size());
@@ -264,168 +365,78 @@ HTTPResponse putHanlder(HTTPRequest &request)
   return response;
 }
 
-HTTPResponse methodHandler(HTTPRequest &request)
-{
-  /*
-  GET URL
-    URL이 가리키는 디렉토리 조회 또는 파일 가져오기
-  POST
-    디렉토리 생성
-  PUT
-    파일 업로드
-  DELETE
-    파일 또는 디렉토리 삭제
-  */
-  if (request.method == "GET")
-  {
-    return getHanlder(request);
-  }
-  else if (request.method == "POST")
-  {
-    return postHanlder(request);
-  }
-  else if (request.method == "DELETE")
-  {
-    return deleteHanlder(request);
-  }
-  else if (request.method == "PUT")
-  {
-    return putHanlder(request);
-  }
-
-  return errorResponse("501", "Not Implemented", "Couldn't handle this method");
-}
-
-HTTPResponse requestHandler(char *buffer)
+HTTPResponse errorResponse(std::string error_code, std::string error_phrase, std::string error_message)
 {
   HTTPResponse response;
-  try
-  {
-    string req_message = string(buffer);
+  response.protocol = "HTTP/1.0";
+  response.status_code = error_code;
+  response.status_phrase = error_phrase;
 
-    HTTPRequest request = HTTPRequest(req_message);
+  std::string error_template = readFile("./templates/error.html");
 
-    response = methodHandler(request);
-  }
-  catch (int expn)
-  {
-    response = errorResponse("501", "Not Implemented", "Couldn't handle this method");
-  }
+  response.headers["Connection"] = "close";
+  response.body = fmt::format(error_template, error_code, error_phrase, error_message);
+  response.headers["Content-Length"] = std::to_string(response.body.size());
 
   return response;
 }
 
-int main()
+std::string currentDirectory(std::string path)
 {
-  int server_fd, listen_fd, valread;
-  int opt = 1;
-  struct sockaddr_in address;
-  int addrlen = sizeof(address);
-  char buffer[MAX_HEADER_SIZE] = {0}; // 1048576 * 7
+  std::string ret = "";
 
-  if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
+  int j = path.size();
+  while (j && path[--j] != '/')
+    ;
+  for (int i = 0; i <= j; ++i)
+    ret += path[i];
+  return ret;
+}
+
+std::string readFile(std::string filepath)
+{
+  std::ifstream file;
+  file.open(filepath.c_str());
+  file.seekg(0, std::ios::end);
+  std::streamsize size = file.tellg();
+  file.seekg(0, std::ios::beg);
+
+  std::stringstream strStream;
+  strStream << file.rdbuf();
+
+  return strStream.str();
+}
+
+std::string getType(std::string filepath)
+{
+  if (filepath.find(".html") != std::string::npos)
+    return "text/html";
+  else if (filepath.find(".gif") != std::string::npos)
+    return "image/gif";
+  else if (filepath.find(".png") != std::string::npos)
+    return "image/png";
+  else if (filepath.find(".jpg") != std::string::npos)
+    return "image/jpeg";
+  else if (filepath.find(".mp4") != std::string::npos)
+    return "video/mp4";
+  else if (filepath.find(".mov") != std::string::npos)
+    return "video/mp4";
+  else if (filepath.find(".pdf") != std::string::npos)
+    return "application/pdf";
+
+  return "text/plain";
+}
+
+std::string parsePath(std::string url)
+{
+  std::string path = "";
+  for (int j = 0; j < url.size() && url[j] != '?'; ++j)
   {
-    cerr << "socket failed";
-    return -1;
+    path += url[j];
   }
-
-  address.sin_family = AF_INET;
-  address.sin_addr.s_addr = inet_addr("192.168.0.10"); // INADDR_ANY;
-  address.sin_port = htons(PORT);
-
-  if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
+  if (path == "/")
   {
-    cerr << "bind failed";
-    return -1;
+    // path += "index.html";
   }
-
-  while (true)
-  {
-    if (listen(server_fd, 3) < 0)
-    {
-      std::cout << "listen";
-      return -1;
-    }
-
-    if ((listen_fd = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0)
-    {
-      std::cout << "accept";
-      return -1;
-    }
-
-    int pid = fork();
-
-    if (pid != 0)
-    {
-      continue;
-    }
-
-    memset(buffer, 0, sizeof(buffer));
-    std::vector<char> recv_buffer(MAX_HEADER_SIZE, 0);
-
-    int content_length = -1;
-    valread = read(listen_fd, buffer, MAX_HEADER_SIZE);
-    if (valread > 0)
-    {
-      int header_end = -1;
-      for (int j = 0; j + 3 < valread; ++j)
-      {
-        if (buffer[j] == '\r' && buffer[j + 1] == '\n' && buffer[j + 2] == '\r' && buffer[j + 3] == '\n')
-        {
-          header_end = j;
-          break;
-        }
-      }
-      if (header_end == -1)
-      {
-        // error 413 Entity Too Large
-      }
-      else
-      {
-        memcpy(recv_buffer.data(), buffer, header_end);
-        HTTPRequest request_header = HTTPRequest(recv_buffer.data());
-        if (request_header.headers.find("Content-Length") != request_header.headers.end())
-        {
-          content_length = atoi(request_header.headers["Content-Length"].c_str());
-        }
-
-        memcpy(recv_buffer.data(), buffer, valread);
-      }
-    }
-
-    if (content_length > 0)
-    {
-      recv_buffer.resize(content_length);
-
-      for (int received = valread; received < content_length; received += valread)
-      {
-        valread = read(listen_fd, buffer, MAX_RECV_SIZE);
-        if (valread > 0)
-        {
-          fprintf(stderr, "Bytes received: %d\t total: %d\t content-length: %d\n", valread, received + valread, content_length);
-          memcpy(recv_buffer.data() + received, buffer, valread);
-        }
-      }
-    }
-    printf("%.1024s\n", recv_buffer.data());
-
-    HTTPResponse response = requestHandler(recv_buffer.data());
-    string response_message = response.toMessage();
-
-    int buffer_size = MAX_SEND_SIZE;
-    char sending_buffer[MAX_SEND_SIZE] = {0};
-    memset(sending_buffer, 0, sizeof(sending_buffer));
-    for (int sent = 0, chunk_size; sent < response_message.size(); sent += chunk_size)
-    {
-      chunk_size = (int)response_message.size() - sent > buffer_size ? buffer_size : (int)response_message.size() - sent;
-      memcpy(sending_buffer, response_message.data() + sent, chunk_size);
-      chunk_size = send(listen_fd, sending_buffer, chunk_size, NULL);
-      fprintf(stderr, "Bytes sent: %d\t total: %d\t content-length: %d\n", chunk_size, sent + chunk_size, response_message.size());
-    }
-
-    close(listen_fd);
-    return 0;
-  }
-
-  return 0;
+  return path;
 }
