@@ -9,6 +9,7 @@
 #include "./include/http.h"
 #include "./include/base64.h"
 
+#define ADDRESS "192.168.0.10"
 #define PORT 1234
 #define MAX_RECV_SIZE 8192
 #define MAX_SEND_SIZE 8192
@@ -31,7 +32,7 @@ int main()
   while (true)
   {
     if (sock == -1)
-      sock = getSocket("192.168.0.10", PORT);
+      sock = getSocket(ADDRESS, PORT);
     if (sock == -1)
       return -1;
 

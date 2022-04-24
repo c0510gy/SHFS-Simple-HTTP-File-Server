@@ -19,6 +19,7 @@
 #define FMT_HEADER_ONLY
 #include "./lib/fmt/core.h"
 
+#define ADDRESS "192.168.0.10"
 #define PORT 1234
 #define MAX_HEADER_SIZE 8192
 #define MAX_RECV_SIZE 8192
@@ -56,7 +57,7 @@ int main()
   }
 
   address.sin_family = AF_INET;
-  address.sin_addr.s_addr = inet_addr("192.168.0.10"); // INADDR_ANY;
+  address.sin_addr.s_addr = inet_addr(ADDRESS); // INADDR_ANY;
   address.sin_port = htons(PORT);
 
   if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
