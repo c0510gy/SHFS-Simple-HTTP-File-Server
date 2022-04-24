@@ -35,6 +35,7 @@ std::string parsePath(std::string url);
 HTTPResponse requestHandler(char *buffer);
 HTTPResponse methodHandler(HTTPRequest &request);
 HTTPResponse getHandler(HTTPRequest &request);
+HTTPResponse headHandler(HTTPRequest &request);
 HTTPResponse postHandler(HTTPRequest &request);
 HTTPResponse deleteHandler(HTTPRequest &request);
 HTTPResponse putHandler(HTTPRequest &request);
@@ -186,10 +187,16 @@ HTTPResponse methodHandler(HTTPRequest &request)
     파일 업로드
   DELETE
     파일 또는 디렉토리 삭제
+  HEAD
+    GET without body
   */
   if (request.method == "GET")
   {
     return getHandler(request);
+  }
+  else if (request.method == "HEAD")
+  {
+    return headHandler(request);
   }
   else if (request.method == "POST")
   {
@@ -290,6 +297,22 @@ HTTPResponse getHandler(HTTPRequest &request)
   }
 
   return errorResponse("403", "Forbidden", "Couldn't read the file");
+}
+
+HTTPResponse headHandler(HTTPRequest &request)
+{
+  std::string path = ROOT_DIRECTORY + parsePath(request.URL);
+  std::cout << path << std::endl;
+
+  HTTPResponse response = getHandler(request);
+  response.protocol = "HTTP/1.0";
+  response.status_code = "200";
+  response.status_phrase = "OK";
+  response.headers["Connection"] = "close";
+  response.body = "";
+  response.headers["Content-Length"] = std::to_string(response.body.size());
+
+  return response;
 }
 
 HTTPResponse postHandler(HTTPRequest &request)

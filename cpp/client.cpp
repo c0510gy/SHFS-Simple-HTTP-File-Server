@@ -16,6 +16,7 @@
 int getSocket(char *address, int port);
 
 HTTPRequest requestGET(std::string url);
+HTTPRequest requestHEAD(std::string url);
 HTTPRequest requestPOST(std::string url, std::string directory_name);
 HTTPRequest requestDELETE(std::string url, std::string file_name);
 HTTPRequest requestPUT(std::string url, std::string file_name, std::string file_content);
@@ -36,6 +37,7 @@ int main()
 
     std::cout << "Commands: ";
     std::cout << "\n\t- Get file or list directory\n\t\tget <path>";
+    std::cout << "\n\t- Head request (GET method response without body)\n\t\thead <path>";
     std::cout << "\n\t- Create new directory\n\t\tcreate_dir <path> <new directory name>";
     std::cout << "\n\t- Create new file\n\t\tcreate_file <path> <file name> <content>";
     std::cout << "\n\t- Delete file or directory\n\t\tdel <path> <file name>";
@@ -49,6 +51,10 @@ int main()
     if (comd == "get")
     {
       request = requestGET(path);
+    }
+    else if (comd == "head")
+    {
+      request = requestHEAD(path);
     }
     else if (comd == "create_dir")
     {
@@ -133,6 +139,14 @@ HTTPRequest requestGET(std::string url)
   request.version = "HTTP/1.0";
 
   request.headers["Connection"] = "keep-alive";
+
+  return request;
+}
+
+HTTPRequest requestHEAD(std::string url)
+{
+  HTTPRequest request = requestGET(url);
+  request.method = "HEAD";
 
   return request;
 }
