@@ -4,6 +4,9 @@
 #include <string>
 #include <vector>
 
+static std::string base64Encode(const std::string &in);
+static std::string base64Decode(const std::string &in);
+
 static std::string base64Encode(const std::string &in)
 {
 
