@@ -77,6 +77,7 @@ public:
     headers.clear();
     body = "";
   }
+
   std::map<std::string, std::string> parseBody()
   {
     std::map<std::string, std::string> parsed_body;
@@ -114,10 +115,12 @@ public:
 
     return parsed_body;
   }
+
   HTTPRequest()
   {
     clear();
   }
+
   HTTPRequest(std::string req_message)
   {
     clear();
@@ -200,6 +203,28 @@ public:
 
     URL = urlDecode(URL);
   }
+
+  std::string toMessage()
+  {
+    std::string url = URL;
+    if (url_params.size())
+      url += "&";
+    for (auto itr = url_params.begin(); itr != url_params.end(); ++itr)
+    {
+      if (itr == url_params.begin())
+        url += "?";
+      else
+        url += "&";
+      url += itr->first + "=" + itr->second;
+    }
+    std::string request_line = method + " " + urlEncode(url) + " " + version + "\r\n";
+    std::string header_lines = "";
+    for (auto itr = headers.begin(); itr != headers.end(); ++itr)
+    {
+      header_lines += itr->first + ": " + itr->second + "\r\n";
+    }
+    return request_line + header_lines + "\r\n" + body;
+  }
 };
 
 class HTTPResponse
@@ -211,7 +236,81 @@ public:
   std::map<std::string, std::string> headers;
   std::string body;
 
-  HTTPResponse() {}
+  void clear()
+  {
+    protocol = "";
+    status_code = "";
+    status_phrase = "";
+    headers.clear();
+    body = "";
+  }
+
+  HTTPResponse() { clear(); }
+
+  HTTPResponse(std::string res_message)
+  {
+    clear();
+
+    int j = 0;
+    for (int col = 0; j + 1 < res_message.size(); ++j)
+    {
+      if (col < 2 && res_message[j] == ' ')
+      {
+        ++col;
+      }
+      else if (res_message[j] == '\r' && res_message[j + 1] == '\n')
+        break;
+      else
+      {
+        switch (col)
+        {
+        case 0:
+          protocol += res_message[j];
+          break;
+        case 1:
+          status_code += res_message[j];
+          break;
+        case 2:
+          status_phrase += res_message[j];
+          break;
+        }
+      }
+    }
+    j += 2;
+    std::string key;
+    for (int col = 0; j + 1 < res_message.size(); ++j)
+    {
+      if (res_message[j] == ':' && res_message[j + 1] == ' ')
+      {
+        ++col;
+        ++j;
+        headers[key] = "";
+      }
+      else if (col && res_message[j] == '\r' && res_message[j + 1] == '\n')
+      {
+        col = 0;
+        key = "";
+        ++j;
+      }
+      else if (!col && res_message[j] == '\r' && res_message[j + 1] == '\n')
+        break;
+      else
+      {
+        switch (col)
+        {
+        case 0:
+          key += res_message[j];
+          break;
+        case 1:
+          headers[key] += res_message[j];
+          break;
+        }
+      }
+    }
+    j += 2;
+    for (; j < res_message.size(); ++j)
+      body += res_message[j];
+  }
 
   std::string toMessage()
   {

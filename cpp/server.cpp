@@ -103,7 +103,8 @@ int main()
       }
       if (header_end == -1)
       {
-        // error 413 Entity Too Large
+        // To do
+        errorResponse("413", "Entity Too Large", "Exceeded maximum header size");
       }
       else
       {
