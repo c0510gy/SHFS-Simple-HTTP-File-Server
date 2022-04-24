@@ -1,10 +1,13 @@
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <stdio.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <string.h>
 #include "./include/http.h"
+#include "./include/base64.h"
 
 #define PORT 1234
 #define MAX_RECV_SIZE 8192
@@ -40,6 +43,20 @@ int getSocket(char *address, int port)
   return sock;
 }
 
+std::string readFile(std::string filepath)
+{
+  std::ifstream file;
+  file.open(filepath.c_str());
+  file.seekg(0, std::ios::end);
+  std::streamsize size = file.tellg();
+  file.seekg(0, std::ios::beg);
+
+  std::stringstream strStream;
+  strStream << file.rdbuf();
+
+  return strStream.str();
+}
+
 HTTPRequest requestGET(std::string url)
 {
   HTTPRequest request;
@@ -49,6 +66,49 @@ HTTPRequest requestGET(std::string url)
 
   request.headers["Connection"] = "keep-alive";
   // request.headers["Content-Length"] = std::to_string(request.body.size());
+
+  return request;
+}
+
+HTTPRequest requestPOST(std::string url, std::string directory_name)
+{
+  HTTPRequest request;
+  request.method = "POST";
+  request.URL = url;
+  request.version = "HTTP/1.0";
+
+  request.headers["Connection"] = "keep-alive";
+  request.body = "directory_name=" + urlEncode(directory_name);
+  request.headers["Content-Length"] = std::to_string(request.body.size());
+
+  return request;
+}
+
+HTTPRequest requestDELETE(std::string url, std::string file_name)
+{
+  HTTPRequest request;
+  request.method = "DELETE";
+  request.URL = url;
+  request.version = "HTTP/1.0";
+
+  request.headers["Connection"] = "keep-alive";
+  request.body = "file_name=" + urlEncode(file_name);
+  request.headers["Content-Length"] = std::to_string(request.body.size());
+
+  return request;
+}
+
+HTTPRequest requestPUT(std::string url, std::string file_name, std::string file_content)
+{
+  HTTPRequest request;
+  request.method = "PUT";
+  request.URL = url;
+  request.version = "HTTP/1.0";
+
+  request.headers["Connection"] = "keep-alive";
+  request.body = "file=" + urlEncode(base64Encode(file_content));
+  request.body += "&name=" + urlEncode(file_name);
+  request.headers["Content-Length"] = std::to_string(request.body.size());
 
   return request;
 }
@@ -65,11 +125,45 @@ int main()
     if (sock == -1)
       return -1;
 
-    std::cout << "";
-    int t;
-    std::cin >> t;
+    std::cout << "Commands: ";
+    std::cout << "\n\t- Get file or list directory\n\t\tget <path>";
+    std::cout << "\n\t- Create new directory\n\t\tcreate_dir <path> <new directory name>";
+    std::cout << "\n\t- Create new file\n\t\tcreate_file <path> <file name> <content>";
+    std::cout << "\n\t- Delete file or directory\n\t\tdel <path> <file name>";
+    std::cout << "\n\n";
 
-    HTTPRequest request = requestGET("/");
+    HTTPRequest request;
+
+    std::string comd, path;
+    std::cout << "Command> ";
+    std::cin >> comd >> path;
+    if (comd == "get")
+    {
+      request = requestGET(path);
+    }
+    else if (comd == "create_dir")
+    {
+      std::string directory_name;
+      std::cin >> directory_name;
+      request = requestPOST(path, directory_name);
+    }
+    else if (comd == "create_file")
+    {
+      std::string file_name, file_content;
+      std::cin >> file_name >> file_content;
+      request = requestPUT(path, file_name, file_content);
+    }
+    else if (comd == "del")
+    {
+      std::string file_name;
+      std::cin >> file_name;
+      request = requestDELETE(path, file_name);
+    }
+    else
+    {
+      std::cout << "Wrong command\n";
+      continue;
+    }
 
     std::string request_message = request.toMessage();
 
