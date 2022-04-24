@@ -14,7 +14,7 @@
 #define MAX_RECV_SIZE 8192
 #define MAX_SEND_SIZE 8192
 
-int getSocket(char *address, int port);
+int getSocket(const char *address, const int port);
 
 HTTPRequest requestGET(std::string url);
 HTTPRequest requestHEAD(std::string url);
@@ -102,7 +102,7 @@ int main()
   return 0;
 }
 
-int getSocket(char *address, int port)
+int getSocket(const char *address, const int port)
 {
   int sock = 0;
   struct sockaddr_in serv_addr;

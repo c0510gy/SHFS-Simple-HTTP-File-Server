@@ -147,8 +147,8 @@ int main()
     {
       chunk_size = (int)response_message.size() - sent > buffer_size ? buffer_size : (int)response_message.size() - sent;
       memcpy(sending_buffer, response_message.data() + sent, chunk_size);
-      chunk_size = send(listen_fd, sending_buffer, chunk_size, NULL);
-      fprintf(stderr, "Bytes sent: %d\t total: %d\t content-length: %d\n", chunk_size, sent + chunk_size, response_message.size());
+      chunk_size = send(listen_fd, sending_buffer, chunk_size, 0);
+      fprintf(stderr, "Bytes sent: %d\t total: %d\t content-length: %d\n", chunk_size, sent + chunk_size, (int)response_message.size());
     }
 
     close(listen_fd);
