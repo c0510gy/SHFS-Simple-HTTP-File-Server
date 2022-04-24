@@ -52,7 +52,7 @@ int main()
 
   if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
   {
-    std::cerr << "socket failed";
+    std::cerr << "socket failed\n";
     return -1;
   }
 
@@ -62,7 +62,7 @@ int main()
 
   if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
   {
-    std::cerr << "bind failed";
+    std::cerr << "bind failed\n";
     return -1;
   }
 
@@ -70,15 +70,17 @@ int main()
   {
     if (listen(server_fd, MAX_CONNECTION) < 0)
     {
-      std::cerr << "listen";
+      std::cerr << "listen failed\n";
       return -1;
     }
 
     if ((listen_fd = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0)
     {
-      std::cerr << "accept";
+      std::cerr << "accept failed\n";
       return -1;
     }
+
+    std::cout << "Client accepted (Addr: " << inet_ntoa(address.sin_addr) << ", Port: " << ntohs(address.sin_port) << ")\n";
 
     int pid = fork();
 
@@ -130,12 +132,21 @@ int main()
         valread = read(listen_fd, buffer, MAX_RECV_SIZE);
         if (valread > 0)
         {
-          fprintf(stderr, "Bytes received: %d\t total: %d\t content-length: %d\n", valread, received + valread, content_length);
+          std::cout << "Bytes received: " << valread;
+          std::cout << "\t total: " << received + valread;
+          std::cout << "\t content-length: " << content_length;
+          std::cout << "\n";
           memcpy(recv_buffer.data() + received, buffer, valread);
         }
       }
     }
-    printf("%.1024s\n", recv_buffer.data());
+
+    std::cout << "------------------------------\n";
+    if (recv_buffer.size() > 1024)
+      std::cout << std::string(recv_buffer.data(), recv_buffer.data() + 1024) << "...\n";
+    else
+      std::cout << recv_buffer.data() << "\n";
+    std::cout << "------------------------------\n";
 
     HTTPResponse response = requestHandler(recv_buffer.data());
     std::string response_message = response.toMessage();
@@ -148,7 +159,10 @@ int main()
       chunk_size = (int)response_message.size() - sent > buffer_size ? buffer_size : (int)response_message.size() - sent;
       memcpy(sending_buffer, response_message.data() + sent, chunk_size);
       chunk_size = send(listen_fd, sending_buffer, chunk_size, 0);
-      fprintf(stderr, "Bytes sent: %d\t total: %d\t content-length: %d\n", chunk_size, sent + chunk_size, (int)response_message.size());
+      std::cout << "Bytes sent: " << chunk_size;
+      std::cout << "\t total: " << sent + chunk_size;
+      std::cout << "\t content-length: " << (int)response_message.size();
+      std::cout << "\n";
     }
 
     close(listen_fd);
@@ -218,7 +232,7 @@ HTTPResponse methodHandler(HTTPRequest &request)
 HTTPResponse getHandler(HTTPRequest &request)
 {
   std::string path = ROOT_DIRECTORY + parsePath(request.URL);
-  std::cout << path << std::endl;
+  std::cout << "GET Handler: " << path << std::endl;
 
   if (!std::filesystem::exists(path))
   {
@@ -232,8 +246,6 @@ HTTPResponse getHandler(HTTPRequest &request)
                                         path.substr(0, path.size() - 1))
                                         .erase(0, ROOT_DIRECTORY.size())
                                   : "";
-
-    std::cout << "parent_path " << parent_path << std::endl;
 
     std::string directory_template = readFile("./templates/directory.html");
 
@@ -303,7 +315,7 @@ HTTPResponse getHandler(HTTPRequest &request)
 HTTPResponse headHandler(HTTPRequest &request)
 {
   std::string path = ROOT_DIRECTORY + parsePath(request.URL);
-  std::cout << path << std::endl;
+  std::cout << "HEAD Handler: " << path << std::endl;
 
   HTTPResponse response = getHandler(request);
   response.protocol = "HTTP/1.0";
@@ -319,7 +331,7 @@ HTTPResponse headHandler(HTTPRequest &request)
 HTTPResponse postHandler(HTTPRequest &request)
 {
   std::string path = ROOT_DIRECTORY + parsePath(request.URL);
-  std::cout << path << std::endl;
+  std::cout << "POST Handler: " << path << std::endl;
 
   std::map<std::string, std::string> parsed_body = request.parseBody();
 
@@ -343,13 +355,12 @@ HTTPResponse postHandler(HTTPRequest &request)
 HTTPResponse deleteHandler(HTTPRequest &request)
 {
   std::string path = ROOT_DIRECTORY + parsePath(request.URL);
-  std::cout << path << std::endl;
+  std::cout << "DELETE Handler: " << path << std::endl;
 
   std::map<std::string, std::string> parsed_body = request.parseBody();
 
   std::string file_name = parsed_body["file_name"];
 
-  std::cout << "file_name " << file_name << std::endl;
   if (file_name.size() && std::filesystem::exists(path + file_name))
   {
     std::filesystem::remove_all(path + file_name);
@@ -368,11 +379,9 @@ HTTPResponse deleteHandler(HTTPRequest &request)
 HTTPResponse putHandler(HTTPRequest &request)
 {
   std::string path = ROOT_DIRECTORY + parsePath(request.URL);
-  std::cout << path << std::endl;
+  std::cout << "PUT Handler: " << path << std::endl;
 
   std::map<std::string, std::string> parsed_body = request.parseBody();
-
-  std::cout << "new_file_name " << parsed_body["name"] << std::endl;
 
   std::string file = base64Decode(parsed_body["file"]);
 

@@ -87,7 +87,10 @@ int main()
 
     memset(buffer, 0, sizeof(buffer));
     valread = read(sock, buffer, MAX_RECV_SIZE);
-    printf("%s\n", buffer);
+
+    std::cout << "------------------------------\n";
+    std::cout << buffer << "\n";
+    std::cout << "------------------------------\n";
 
     HTTPResponse response = HTTPResponse(buffer);
     if (response.headers["Connection"] == "close")
@@ -109,7 +112,7 @@ int getSocket(const char *address, const int port)
 
   if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
   {
-    printf("\n Socket creation error \n");
+    std::cerr << "socket failed\n";
     return -1;
   }
 
@@ -119,13 +122,13 @@ int getSocket(const char *address, const int port)
   // Convert IPv4 and IPv6 addresses from text to binary form
   if (inet_pton(AF_INET, address, &serv_addr.sin_addr) <= 0)
   {
-    printf("\nInvalid address/ Address not supported \n");
+    std::cerr << "Invalid address / Address not supported\n";
     return -1;
   }
 
   if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
   {
-    printf("\nConnection Failed \n");
+    std::cerr << "connection failed\n";
     return -1;
   }
 
