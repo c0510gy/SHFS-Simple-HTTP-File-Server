@@ -1,5 +1,8 @@
 root/
 
+# MAC
+.DS_Store
+
 # Prerequisites
 *.d
 
