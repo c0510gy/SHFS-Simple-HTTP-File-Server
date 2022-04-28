@@ -1,4 +1,6 @@
-# socket-HTTP
+# SHFS: Simple HTTP File Server
+
+컴퓨터네트워크 01분반, 소프트웨어학부 20191632 윤상건
 
 ## Table of Contents
 
@@ -24,6 +26,12 @@
   - [6.4. 서버 및 클라이언트](#64-서버-및-클라이언트)
 
 ## 1. 개요
+
+**시연영상**
+
+[![YoutubeVid](http://img.youtube.com/vi/BNiSYpJf2w8/0.jpg)](http://www.youtube.com/watch?v=BNiSYpJf2w8)
+
+https://youtu.be/BNiSYpJf2w8
 
 C++ socket programming을 이용하여 제작한 HTTP 기반의 파일 서버, 기본적인 디렉토리 탐색, 폴더 생성, 파일 제거, 파일 업로드 등의 기능 제공
 
